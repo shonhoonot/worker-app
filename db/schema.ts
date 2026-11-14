@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, primaryKey, index } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, primaryKey, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
 export const jobs = sqliteTable('jobs', {
  plan:text('plan'), publishedAt:integer('published_at'), expiresAt:integer('expires_at'), id:text('id').primaryKey(), ownerId:text('owner_id').notNull(), title:text('title').notNull(), company:text('company').notNull(), city:text('city').notNull(), cat:text('cat').notNull(), type:text('type').notNull(), level:text('level').notNull(), pay:integer('pay').notNull(), unit:text('unit').notNull(), schedule:text('schedule').notNull(), description:text('description').notNull(), contact:text('contact').notNull(), status:text('status').notNull().default('pending'), moderationNote:text('moderation_note').notNull().default(''), revision:integer('revision').notNull().default(1), createdAt:integer('created_at').notNull(), updatedAt:integer('updated_at').notNull()
 },t=>[index('jobs_status_date').on(t.status,t.createdAt),index('jobs_owner_date').on(t.ownerId,t.createdAt)]);
@@ -6,3 +6,11 @@ export const saved=sqliteTable('saved',{userId:text('user_id').notNull(),jobId:t
 export const blocks=sqliteTable('blocks',{userId:text('user_id').notNull(),blockedId:text('blocked_id').notNull()},t=>[primaryKey({columns:[t.userId,t.blockedId]})]);
 export const reports=sqliteTable('reports',{id:text('id').primaryKey(),userId:text('user_id').notNull(),jobId:text('job_id').notNull().references(()=>jobs.id,{onDelete:'cascade'}),reason:text('reason').notNull(),status:text('status').notNull().default('open'),createdAt:integer('created_at').notNull()},t=>[index('reports_status').on(t.status)]);
 export const audit=sqliteTable('audit',{id:text('id').primaryKey(),actorId:text('actor_id').notNull(),jobId:text('job_id').notNull(),action:text('action').notNull(),note:text('note').notNull().default(''),createdAt:integer('created_at').notNull()});
+
+export const applications=sqliteTable('applications',{
+ id:text('id').primaryKey(),jobId:text('job_id').notNull().references(()=>jobs.id,{onDelete:'cascade'}),
+ applicantId:text('applicant_id').notNull(),name:text('name').notNull(),contact:text('contact').notNull(),message:text('message').notNull(),
+ dates:text('dates').notNull(),snapshot:text('snapshot').notNull(),jobRevision:integer('job_revision').notNull(),
+ status:text('status').notNull().default('submitted'),revision:integer('revision').notNull().default(1),
+ createdAt:integer('created_at').notNull(),updatedAt:integer('updated_at').notNull()
+},t=>[uniqueIndex('applications_job_applicant').on(t.jobId,t.applicantId),index('applications_applicant_date').on(t.applicantId,t.updatedAt)]);

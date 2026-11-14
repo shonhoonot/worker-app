@@ -41,7 +41,7 @@ Use the Sites lifecycle helpers for actual dependency installation, local previe
 
 ## Product boundaries
 
-This is not an App Store / Google Play native binary. No payments, chat, resume upload, employer identity verification, push notification service, Google/Apple login or automated application submission has been added.
+This is not an App Store / Google Play native binary. No payments, chat, resume upload, employer identity verification, push notification service, Google/Apple login or automated hiring decisions has been added.
 
 Before public launch: determine the Japanese job-information service classification; finalize operator/support details, privacy/retention terms and account/data deletion; implement stronger abuse controls and pagination; verify identity and moderation flows with multiple live accounts; test on physical mobile devices and build native clients as needed. Current list limits: 500 jobs and 200 unresolved reports. Closed jobs stay in owner history. Saved references to closed/unpublished jobs remain stored but are not displayed to other readers.
 
@@ -54,9 +54,9 @@ The original browser-local data is not silently uploaded or migrated. Users can 
 - Migration 0001 adds nullable plan/publication/expiry columns and preserves older jobs. New dates are required when editing an older listing. Dates and deadline are validated on the server, including again on approval.
 - Copy creates a new pending listing with refreshed dates, rather than updating the old listing. Close hides it immediately. Construction/demolition categories and daily pay are supported.
 - ¥50/day is an illustrative maximum-price preview only. Beta remains free: no checkout, wallet, invoice, charge, or automatic renewal is implemented.
-- In-app applications, candidate acceptance, filled-position counting and LINE/push notifications are not yet implemented. Contact remains email.
+- In-app applications are implemented below. Candidate acceptance, filled-position counting and LINE/push notifications remain future work.
 
-Validation: 23 SQLite-backed service tests, TypeScript and production build. Previous UI component QA covered range presets and selected-day rows; hosted authenticated create/approve flow still requires signed-in verification.
+Validation of the scheduling release: 23 SQLite-backed service tests, TypeScript and production build. Previous UI component QA covered range presets and selected-day rows; hosted authenticated create/approve flow still requires signed-in verification.
 
 ## GitHub and local development
 
@@ -79,6 +79,16 @@ For local D1 initialization, build first, then execute each SQL file in `drizzle
 ```sh
 node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_lethal_christian_walker.sql
 node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0001_known_rumiko_fujikawa.sql
+node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0002_windy_excalibur.sql
 ```
 
 Local preview identity is development-only. Do not expose the dev server to the internet. Moving outside Sites requires a trusted authentication gateway or a replacement session implementation; never trust caller-supplied identity headers directly in production.
+
+
+## In-app applications (2026-11-14)
+
+Applicants can submit a name, contact email, optional message and applicable work dates with explicit sharing consent. `applications` stores a snapshot of the job terms and its revision at submission. Only the applicant and job owner can read the request; admin status alone grants no access. The job owner can acknowledge it as reviewed, which is explicitly not a hiring decision.
+
+The unique job/applicant index and conditional SQL prevent duplicate submissions, stale job revisions and submissions after a close/edit. Withdrawals erase name/contact/message while retaining status and job-term history. A withdrawn request can be resubmitted using its current revision. Account deletion removes the applicant's requests; job deletion cascades its requests. Edit/close does not silently overwrite the terms already submitted by applicants.
+
+Application lists currently return the latest 500 records per view. No automatic email, LINE/push notification, candidate acceptance or capacity reservation is performed. Service tests: 32 passing. Typecheck and production build are required. Local component QA verified date selection and form submission; multi-account hosted E2E remains unverified.

@@ -43,8 +43,28 @@ export type JobInput=z.infer<typeof jobInput>;
 export type Job=JobInput & {id:string;ownerId:string;status:string;moderationNote:string;revision:number;createdAt:number;updatedAt:number;isDemo?:boolean;publishedAt?:number|null;expiresAt?:number|null};
 export type Viewer={userId:string;displayName:string;isAdmin:boolean};
 export type Report={id:string;jobId:string;reason:string;createdAt:number;status:string;title:string};
-export type State={jobs:Job[];saved:string[];blocks:string[];reports:Report[];user:Viewer|null};
+export type State={jobs:Job[];saved:string[];blocks:string[];reports:Report[];applications:Application[];incomingApplications:Application[];user:Viewer|null};
 export const statusLabels:Record<string,string>={pending:'Хяналтад',published:'Нийтлэгдсэн',rejected:'Буцаасан',closed:'Хаагдсан',expired:'Хугацаа дууссан'};
 export function assertSameOrigin(request:Request){const origin=request.headers.get('origin');if(!origin||origin!==new URL(request.url).origin)throw new DomainError(403,'Хүсэлтийн эх үүсвэр зөвшөөрөгдөөгүй.');}
 export class DomainError extends Error{status:number;constructor(status:number,message:string){super(message);this.status=status}}
 export function canManage(user:Viewer|null,job:{ownerId:string}){return !!user&&user.userId===job.ownerId}
+
+export const applicationInput=z.object({
+ name:text(2,80),contact:z.string().trim().email().max(254),message:z.string().trim().max(1000).default(''),
+ dates:z.array(calendarDate).max(31).default([]),consent:z.literal(true)
+});
+export type ApplicationSnapshot=Pick<JobInput,'title'|'company'|'city'|'pay'|'unit'|'schedule'|'plan'>;
+export type Application={id:string;jobId:string;name:string;contact:string;message:string;dates:string[];snapshot:ApplicationSnapshot;jobRevision:number;currentJobRevision:number;jobStatus:string;status:'submitted'|'reviewed'|'withdrawn';revision:number;createdAt:number;updatedAt:number};
+export const applicationLabels={submitted:'Илгээсэн',reviewed:'Ажил олгогч үзсэн',withdrawn:'Цуцалсан'};
+export function validateApplicationDates(plan:SchedulePlan|null|undefined,dates:string[],now=Date.now()){
+ const fail=(message:string):never=>{throw new DomainError(400,message)};
+ if(new Set(dates).size!==dates.length)fail('Сонгосон өдрүүд давхардсан байна.');
+ if(plan?.mode==='selected'){
+  const offered=plan.days.map(d=>d.date);
+  if(!dates.length||dates.some(d=>!offered.includes(d)||d<tokyoDate(now)))fail('Зар дээрх ирээдүйн өдрүүдээс сонгоно уу.');
+  if(plan.team==='same'&&dates.length!==offered.length)fail('Ижил багийн ажилд бүх өдрөөр хүсэлт өгнө.');
+ }else{
+  if(dates.length)fail('Энэ зарын хуваарийг бүхэлд нь зөвшөөрнө үү.');
+  if(plan&&plan.start<tokyoDate(now))fail('Энэ ажлын эхлэх өдөр өнгөрсөн байна.');
+ }
+}

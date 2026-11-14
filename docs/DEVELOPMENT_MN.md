@@ -22,6 +22,7 @@ pnpm run build
 ```sh
 node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_lethal_christian_walker.sql
 node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0001_known_rumiko_fujikawa.sql
+node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0002_windy_excalibur.sql
 pnpm dev
 ```
 
@@ -39,7 +40,7 @@ Preview-ийн URL terminal дээр гарна. Local болон нийтлэг
 ## Дараагийн ажлын дараалал
 
 1. Нэвтэрсэн employer → зар нэмэх → admin батлах → jobseeker харах урсгалыг live орчинд шалгах.
-2. Апп дотор хүсэлт өгөх: өөрийн хүсэлт, давхардлаас хамгаалалт, цуцлах боломж.
+2. Хүсэлт өгөх, цуцлах, ирсэн хүсэлтийг үзэх боломж нэмэгдсэн; хоёр өөр live бүртгэлээр баталгаажуулах.
 3. Ажил олгогч хүсэлтийг гараар зөвшөөрөх; өдөр тус бүрийн хүний тоог давуулж батлахгүй байх.
 4. Зөвшөөрөлтэй LINE / push мэдэгдэл.
 5. Төлбөрийн үйлчилгээ болон native аппыг тусдаа үе шатанд шийдэх.
@@ -65,3 +66,5 @@ Site-ийн хандах эрхийг өөрчлөхгүй. GitHub CI нь зө�
 Одоогийн authentication нь Sites-ийн баталгаажуулсан header-д тулгуурладаг.
 Өөр hosting руу зөөвөл эдгээр header-ийг интернэтээс шууд итгэж болохгүй;
 итгэмжлэгдсэн auth gateway эсвэл баталгаажсан session хэрэгтэй.
+
+Хүсэлт нь ажилд авсан баталгаа биш. Ажил олгогч «Үзсэн» гэж тэмдэглэж болно. Цуцлахад нэр, имэйл, тайлбар устана. Автомат имэйл илгээхгүй.

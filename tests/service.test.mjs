@@ -105,3 +105,65 @@ test('copy creates a separate pending job; early close removes a long-range list
  assert.notEqual(copy.id,id);assert.equal((await f.as(owner).state()).jobs.find(j=>j.id===copy.id).status,'pending');
  await f.as(owner).mutate('close',{id,revision:2});assert.equal((await f.as(viewer).state()).jobs.length,0);
 });
+
+const requestInput={name:'Туршилтын ажилтан',contact:'worker@example.com',message:'Ажиллах боломжтой.',dates:[],consent:true};
+async function apply(f,id,who=viewer,extra={}){await f.as(who).mutate('apply',{...requestInput,id,jobRevision:2,...extra});return (await f.as(who).state()).applications[0]}
+test('applications persist privately for applicant and employer, not other users or admins',async()=>{
+ const f=setup(),id=await publish(f);const a=await apply(f,id,viewer,{applicantId:'owner'});
+ assert.equal(a.name,requestInput.name);assert.equal(a.snapshot.title,input.title);assert.equal(a.jobRevision,2);
+ assert.equal((await f.as(owner).state()).incomingApplications[0].id,a.id);
+ assert.equal((await f.as(admin).state()).incomingApplications.length,0);
+ assert.equal((await f.as(admin).state()).applications.length,0);
+ assert.equal((await f.as(null).state()).incomingApplications.length,0);
+ assert.equal((await f.as(null).state()).applications.length,0);
+});
+test('application requires login, valid contact, consent, current job and a different owner',async()=>{
+ const f=setup(),id=await publish(f);
+ await assert.rejects(f.as(null).mutate('apply',{...requestInput,id,jobRevision:2}),status(401));
+ await assert.rejects(f.as(owner).mutate('apply',{...requestInput,id,jobRevision:2}),status(400));
+ for(const patch of [{consent:false},{contact:'bad'},{name:''},{message:'x'.repeat(1001)}])await assert.rejects(apply(f,id,viewer,patch),status(400));
+ await assert.rejects(apply(f,id,viewer,{jobRevision:1}),status(409));
+ await f.as(owner).mutate('close',{id,revision:2});await assert.rejects(apply(f,id),status(404));
+});
+test('only owner can acknowledge; applicant can withdraw and erase contact; revisions prevent stale actions',async()=>{
+ const f=setup(),id=await publish(f),a=await apply(f,id);
+ await assert.rejects(f.as(admin).mutate('reviewApplication',{id:a.id,revision:1}),status(409));
+ await assert.rejects(f.as(owner).mutate('withdrawApplication',{id:a.id,revision:1}),status(409));
+ await f.as(owner).mutate('reviewApplication',{id:a.id,revision:1});
+ await assert.rejects(f.as(viewer).mutate('withdrawApplication',{id:a.id,revision:1}),status(409));
+ await f.as(viewer).mutate('withdrawApplication',{id:a.id,revision:2});
+ const withdrawn=(await f.as(owner).state()).incomingApplications[0];
+ assert.equal(withdrawn.status,'withdrawn');assert.equal(withdrawn.contact,'');assert.equal(withdrawn.name,'');assert.equal(withdrawn.message,'');
+ await assert.rejects(f.as(owner).mutate('reviewApplication',{id:a.id,revision:3}),status(409));
+ await apply(f,id,viewer,{applicationRevision:3});
+ assert.equal((await f.as(viewer).state()).applications.length,1);assert.equal((await f.as(viewer).state()).applications[0].revision,4);
+});
+test('duplicate concurrent submissions have one winner and preserve original request',async()=>{
+ const f=setup(),id=await publish(f);const results=await Promise.allSettled([apply(f,id),apply(f,id)]);
+ assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM applications').get().n,1);
+});
+test('expired and blocked jobs reject applications',async()=>{
+ const f=setup(),id=await publish(f);await f.as(viewer).mutate('block',{id});await assert.rejects(apply(f,id),status(409));
+ await f.as(viewer).mutate('unblockAll',{});f.sql.prepare('UPDATE jobs SET expires_at=? WHERE id=?').run(Date.now()-1,id);await assert.rejects(apply(f,id),status(404));
+});
+test('selected days must belong to the job and same team requires all offered days',async()=>{
+ const f=setup();const dates=[dateOffset(7),dateOffset(9)];const plan={...input.plan,mode:'selected',start:dates[0],end:dates[1],days:dates.map(date=>({date,workers:3}))};
+ const {id}=await f.as(owner).mutate('create',{...input,plan});await f.as(admin).mutate('review',{id,revision:1,status:'published'});
+ for(const selected of [[],[dates[0]],[dates[0],dates[0]],[dates[0],dateOffset(8)]])await assert.rejects(apply(f,id,viewer,{dates:selected}),status(400));
+ await apply(f,id,viewer,{dates});assert.deepEqual((await f.as(viewer).state()).applications[0].dates,dates);
+});
+test('flexible selected-day request can choose a subset; snapshot survives edits',async()=>{
+ const f=setup();const dates=[dateOffset(7),dateOffset(9)],plan={...input.plan,mode:'selected',team:'flexible',start:dates[0],end:dates[1],days:dates.map(date=>({date,workers:3}))};
+ const {id}=await f.as(owner).mutate('create',{...input,plan});await f.as(admin).mutate('review',{id,revision:1,status:'published'});await apply(f,id,viewer,{dates:[dates[1]]});
+ await f.as(owner).mutate('edit',{...input,id,revision:2,pay:2200});
+ const a=(await f.as(viewer).state()).applications[0];assert.equal(a.snapshot.pay,1500);assert.equal(a.jobRevision,2);assert.equal(a.currentJobRevision,3);assert.equal(a.jobStatus,'pending');
+});
+test('applicant deletion removes their requests; employer deletion cascades requests',async()=>{
+ const f=setup(),id=await publish(f);await apply(f,id);
+ await f.as(viewer).mutate('deleteMyData',{confirmation:'УСТГАХ'});assert.equal((await f.as(owner).state()).incomingApplications.length,0);
+ await apply(f,id);await f.as(owner).mutate('deleteMyData',{confirmation:'УСТГАХ'});assert.equal((await f.as(viewer).state()).applications.length,0);
+});
+test('withdraw remains available after a job closes',async()=>{
+ const f=setup(),id=await publish(f),a=await apply(f,id);await f.as(owner).mutate('close',{id,revision:2});
+ await f.as(viewer).mutate('withdrawApplication',{id:a.id,revision:1});assert.equal((await f.as(viewer).state()).applications[0].status,'withdrawn');
+});
