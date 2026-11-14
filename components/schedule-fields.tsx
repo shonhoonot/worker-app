@@ -1,0 +1,27 @@
+'use client';
+import {useState} from 'react';
+import {DAILY_RATE,dateOffset,tokyoDate,planInput,planLabel} from '../lib/domain';
+import type {SchedulePlan} from '../lib/domain';
+export function ScheduleFields({initial}:{initial?:SchedulePlan|null}){
+ const [p,setP]=useState<SchedulePlan>(()=>initial??{mode:'single',start:dateOffset(1),end:dateOffset(1),days:[],workers:1,team:'same',deadline:dateOffset(1)+'T08:00',listingDays:1});
+ const update=(patch:Partial<SchedulePlan>)=>setP(v=>({...v,...patch}));
+ const sorted=[...p.days].sort((a,b)=>a.date.localeCompare(b.date));
+ const normalized=p.mode==='single'?{...p,end:p.start,days:[]}:p.mode==='selected'?{...p,start:sorted[0]?.date??p.start,end:sorted.at(-1)?.date??p.end}:{...p,days:[]};
+ const parsed=planInput.safeParse(normalized);
+ function quick(offset:number,length=1){const start=dateOffset(offset),end=dateOffset(offset+length-1);update({mode:length===1?'single':'range',start,end,days:[],deadline:start+'T08:00',listingDays:Math.min(30,Math.max(1,offset))})}
+ return <section className="schedule-fields full" aria-label="Ажиллах өдрүүд ба зарын хугацаа">
+ <h3>Ажиллах өдөр ба хүний хэрэгцээ</h3>
+ <div className="quick-dates"><button type="button" onClick={()=>quick(1)}>Маргааш</button><button type="button" onClick={()=>quick(2)}>Нөгөөдөр</button><button type="button" onClick={()=>quick(7,7)}>7 хоногийн дараа · 7 өдөр</button><button type="button" onClick={()=>quick(7,14)}>7 хоногийн дараа · 14 өдөр</button></div>
+ <div className="formgrid"><label className="full">Ажиллах өдрүүд<select value={p.mode} onChange={e=>update({mode:e.target.value as SchedulePlan['mode'],days:e.target.value==='selected'?(p.days.length?p.days:[{date:p.start,workers:p.workers}]):[]})}><option value="single">Нэг өдөр</option><option value="range">Огнооны хүрээ</option><option value="selected">Тодорхой өдрүүд · өдөр тус бүрийн хүний тоо</option></select></label>
+ {p.mode!=='selected'?<><label>Эхлэх өдөр<input type="date" required min={tokyoDate()} value={p.start} onChange={e=>update({start:e.target.value,end:p.end<e.target.value?e.target.value:p.end})}/></label>{p.mode==='range'&&<label>Дуусах өдөр<input type="date" required min={p.start} value={p.end} onChange={e=>update({end:e.target.value})}/></label>}<label>Хэрэгтэй хүний тоо<input type="number" required min={1} max={500} value={p.workers} onChange={e=>update({workers:Number(e.target.value)})}/></label></>:<div className="full day-rows">{p.days.map((d,i)=><div className="day-row" key={i}><label>Өдөр {i+1}<input type="date" required min={tokyoDate()} value={d.date} onChange={e=>update({days:p.days.map((v,k)=>k===i?{...v,date:e.target.value}:v)})}/></label><label>Хүний тоо<input type="number" required min={1} max={500} value={d.workers} onChange={e=>update({days:p.days.map((v,k)=>k===i?{...v,workers:Number(e.target.value)}:v)})}/></label><button type="button" className="text-button" disabled={p.days.length===1} aria-label={'Өдөр '+(i+1)+' хасах'} onClick={()=>update({days:p.days.filter((_,k)=>k!==i)})}>Хасах</button></div>)}<button className="secondary" type="button" disabled={p.days.length>=31} onClick={()=>{const last=p.days.at(-1)?.date;const next=last&&Number.isFinite(Date.parse(last))?new Date(Date.parse(last)+86400000).toISOString().slice(0,10):dateOffset(1);update({days:[...p.days,{date:next,workers:p.workers}]})}}>＋ Өдөр нэмэх</button></div>}
+ <label className="full">Багийн нөхцөл<select value={p.team} onChange={e=>update({team:e.target.value as SchedulePlan['team']})}><option value="same">Бүх хугацаанд ижил хүмүүс ажиллана</option><option value="flexible">Өдөр бүр өөр хүмүүс байж болно</option></select></label>
+ <label className="full">Хүсэлт авах эцсийн хугацаа · Японы цаг<input type="datetime-local" required value={p.deadline} onChange={e=>update({deadline:e.target.value})}/></label>
+ <label className="full">Батлагдсанаас хойш зар харагдах дээд хугацаа<select value={p.listingDays} onChange={e=>update({listingDays:Number(e.target.value)})}>{[1,2,3,4,5,6,7,10,14,21,30].map(n=><option key={n} value={n}>{n} өдөр</option>)}</select></label>
+ </div><div className="price-preview"><strong>Тооцоолсон дээд үнэ: ¥{p.listingDays*DAILY_RATE}</strong><span>¥{DAILY_RATE} × {p.listingDays} өдөр · Нэг өдөр = 24 цаг</span><p>Бета туршилт үнэгүй. Бодит төлбөр суутгахгүй. Ажил үргэлжлэх хоног нь зар харагдах хоногоос тусдаа.</p><p>Админ баталсны дараа хугацаа эхэлнэ. Хүсэлт авах хугацаа эсвэл зарын дээд хугацааны аль түрүүлж дууссанаар зар харагдахаа болино. Хүн бүрдвэл өөрөө эрт хааж болно.</p></div>
+ {!parsed.success&&<p className="error-banner" role="alert">{parsed.error.issues[0]?.message}</p>}
+ <input type="hidden" name="plan" value={JSON.stringify(normalized)}/>
+ </section>
+}
+export function ScheduleSummary({plan,expiresAt}:{plan:SchedulePlan;expiresAt?:number|null}){
+ return <div className="schedule-summary"><strong>Ажиллах: {planLabel(plan)}</strong>{plan.mode==='selected'?<div className="tags">{[...plan.days].sort((a,b)=>a.date.localeCompare(b.date)).map(d=><span className="tag" key={d.date}>{d.date} · {d.workers} хүн</span>)}</div>:<p>{plan.workers} хүн хэрэгтэй</p>}<p>{plan.team==='same'?'Бүх хугацаанд ижил хүмүүс':'Өдөр бүр өөр хүмүүс байж болно'}</p><p>Хүсэлт авах: {plan.deadline.replace('T',' ')} JST</p>{expiresAt&&<p>Зар харагдах хүртэл: {new Date(expiresAt).toLocaleString('mn-MN',{timeZone:'Asia/Tokyo'})} JST</p>}</div>
+}
